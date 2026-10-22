@@ -1,0 +1,25 @@
+# Generated on each PC - do not share (they contain that PC's paths or are rebuilt anyway)
+work/
+transcript
+*.wlf
+wlft*
+modelsim.ini
+*.mpf
+*.cr.mti
+sim/out/
+quartus/check_*/
+quartus/db/
+quartus/incremental_db/
+quartus/output_files/
+quartus/*.rpt
+quartus/*.summary
+quartus/*.smsg
+quartus/*.done
+quartus/*.qws
+__pycache__/
+
+# Simulation dumps and Quartus reports
+*.vcd
+sim_demo.csv
+quartus/*.pin
+
