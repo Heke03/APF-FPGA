@@ -23,3 +23,9 @@ __pycache__/
 sim_demo.csv
 quartus/*.pin
 
+
+# MATLAB/Simulink build cache and run outputs (apf_system.slx itself is shared)
+matlab/slprj/
+*.slxc
+*.asv
+matlab/results/

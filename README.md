@@ -189,6 +189,51 @@ Then in Questa: **File > Open** > `sim/out/apf_system.wlf`, and **Tools > Tcl > 
 - `+T_END=0.3` gives a shorter run.
 - `+DEBUG=sim/out/ctrl_trace.csv` writes a per-frame trace of the controller.
 
+## Simulink model (22 Oct 2026)
+
+`matlab/apf_system.slx` is the whole APF in Simulink (MATLAB R2025a, Simscape Electrical,
+Specialized Power Systems). It uses the same power stage as `tb_apf_system.sv`, but with real
+switching devices:
+- grid source
+- diode-bridge load with the 0.7 s load step
+- IGBT inverter, 3 mH filter, 1000 uF DC link and contactor
+
+The controller subsystem `FPGA controller (apf_core)` repeats the RTL block for block, in floating point:
+
+| Simulink block | RTL |
+|---|---|
+| ADC zero-order holds (phases a, b only, 10 kHz) | measurement scaling in `apf_core.sv` |
+| `SRF-PLL (srf_pll)` | `srf_pll.sv` |
+| `Reference (apf_reference)` | `apf_reference.sv` |
+| `Current + DC-link control (current_controller)` | `current_controller.sv` plus protection/sequencing from `apf_core.sv` |
+| unit delays + `PWM 10 kHz + dead time` | one-frame duty latency + `three_phase_pwm.sv` |
+
+![Simulink model](docs/figures/simulink/model_top.png)
+
+| | Load current THD | Grid current THD with APF | Grid current vs voltage |
+|---|---:|---:|---:|
+| 33 ohm load | 28.1 % | **5.0 %** (RTL sim 4.6 %) | -0.5 deg |
+| 22 ohm load | 27.5 % | **3.6 %** (RTL sim 3.5 %) | -0.4 deg |
+
+PLL locks at 40 ms and switching starts at 80 ms, the same as the RTL simulation.
+Vdc ramps 173 -> 300 V by about 0.33 s. There are no faults.
+
+Differences from the RTL testbench:
+- The load has a 0.5 mH AC line reactor. It gives real diode commutation, where the testbench uses a 0.2 ms lag.
+- Measurements are ideal (no 12-bit quantization or noise).
+
+Files:
+- `matlab/apf_params.m`: every parameter. The model loads it automatically.
+- `matlab/blocks/*.m`: code of the three MATLAB Function blocks.
+- `matlab/build_apf_model.m`: rebuilds the `.slx` from the files above. Run it after editing `blocks/*.m`.
+- `matlab/run_apf_simulation.m`: 1 s run (about 20 s) that prints THD and writes `matlab/results/fig1..4*.png`.
+  Copies of the figures are in `docs/figures/simulink/`.
+
+```matlab
+cd matlab
+run_apf_simulation              % or open apf_system.slx and press Run
+```
+
 ## Rerun
 
 Questa (Transcript, from this folder):
