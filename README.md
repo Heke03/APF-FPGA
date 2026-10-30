@@ -2,6 +2,9 @@
 
 Working project for the FPGA part of the graduation project. Target chip:
 Cyclone V SoC **5CSEMA5F31C6** (Terasic DE1-SoC), 50 MHz clock.
+**Update 30 Oct 2026:** the lab board is actually a **Terasic DE2-115 (Cyclone IV E EP4CE115F29C7)**.
+The RTL is board-independent, but the Quartus checks below still target the DE1-SoC.
+See the H1 section for the sensors and ADC.
 The original ChatGPT-era packages are kept unchanged as a backup in `Desktop\H1`.
 
 ## Using this project on any PC
@@ -176,6 +179,7 @@ It is fixed (26-bit product). The unit tests could not catch it, because it only
 - The diode bridge's commutation is approximated by a 0.2 ms lag.
 - The inverter contactor closes when switching starts.
 - The ADC is an ideal sampler with 20 us latency. The real ADC driver depends on the board revision.
+  (H1: `sim/tb_apf_system_H1.sv` adds real sensor and ADC timing; see the H1 section below.)
 
 Run it (about 5 minutes for 1 s of simulated time):
 
@@ -232,6 +236,31 @@ Files:
 ```matlab
 cd matlab
 run_apf_simulation              % or open apf_system.slx and press Run
+```
+
+## H1: sensors and ADC for the DE2-115 (30 Oct 2026)
+
+The real board is a **Terasic DE2-115 (Cyclone IV E, EP4CE115F29C7)**, not the DE1-SoC. It has no
+usable ADC, so the APF needs external sensors and an ADC. The lab also has an NI cRIO-9063.
+The full study is in [docs/sensor_adc_study_H1.md](docs/sensor_adc_study_H1.md).
+Each option was simulated in closed loop with the real `apf_core` RTL (16 scenarios, plus 3 repeat runs).
+
+- **Recommended:** LEM LA 25-NP (x4 currents) and LEM LV 25-P (x3 voltages) into an
+  **AD7606B/AD7606 module on its +-10 V range**. Grid THD is 4.1 % / 3.4 % (33 / 22 ohm),
+  as good as ideal sensors (4.4 % / 3.5 %).
+- What limits the choice is delay **before** the sample (sensor lag, ADC filter), not conversion
+  time. Keep it under about 15 us (THD up to 4.7 %); 30-50 us gives 5.1-5.3 % at 33 ohm, 100 us gives 7.3 %.
+- The cRIO's delta-sigma modules (NI 9244/9246, about 0.8 ms delay) trip the inverter. Use the cRIO as
+  an independent power-quality meter and operator panel, not in the control loop.
+- The DE2-115 needs Cyclone IV E device support in Quartus (not installed yet) and an AD7606 driver.
+
+```tcl
+vsim -c -do sim/run_sensor_study_H1.do          # all scenarios, about 5 min each
+```
+```matlab
+cd matlab
+sensor_adc_study_H1                             % table + figures (sim/out/H1, copies in docs/figures)
+frontend_sizing_H1                              % sensor resistor values and datasheet-limit checks
 ```
 
 ## Rerun
