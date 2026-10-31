@@ -125,6 +125,27 @@ were rerun in MATLAB, with the same numbers as in step 2.
 
 Next: the DE2-115 top level (switches, LEDs, 7-segment displays, Terasic pin list).
 
+**THD meter, part 1: the math in MATLAB** (`matlab/thd_meter_H3.m`, `matlab/thd_table_H3.m`). The right display of the
+board will show the THD of grid current a, computed in the FPGA from the 10 kHz frame samples:
+
+- every 1000 samples (0.1 s, 5 grid cycles), a DFT of harmonics 1..40 with a 200-point cos/sin table scaled 2^15
+  (the virtual grid is exactly 50 Hz and a frame is exactly 1/200 of a cycle, so the table index is `(h*k) mod 200`)
+- THD = sqrt(sum |I_h|^2, h = 2..40) / |I_1|, the same definition as the FFT THD used everywhere else
+- whole numbers only: samples cut to 2^-10 A, sums rounded by 2^16, a 24-step division and an integer square root,
+  output in 0.01 % (440 = 4.40 %); no reading when the fundamental is below about 0.1 A
+
+A first version used the RMS of the whole signal instead of single harmonics. It read too high (5.2-5.4 % instead
+of 4.4 %), because it also counted harmonics above 40 from the commutation notches, so it was dropped.
+
+| Window of the 1 s run | Meter, filter on | FFT h2-40 | Meter, filter off | FFT h2-40 |
+|---|---|---|---|---|
+| 0.5-0.6 s (33 ohm) | 4.35 % | 4.44 % | 26.06 % | 26.11 % |
+| 0.6-0.7 s (33 ohm) | 4.41 % | 4.49 % | 26.06 % | 26.11 % |
+| 0.9-1.0 s (22 ohm) | 3.27 % | 3.50 % | 26.00 % | 26.06 % |
+
+On known test signals (harmonics up to 40) the meter is within 0.03 points of the exact THD. It is section 5 of
+`run_H3` in the user's MATLAB folder. Next: `rtl/thd_meter_H3.sv`, bit-exact with this MATLAB code.
+
 ## Notes for whoever continues
 
 - The VPS takes one step every 200 ns (10 clocks at 50 MHz). Every product is rounded with
