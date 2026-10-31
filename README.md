@@ -263,6 +263,23 @@ sensor_adc_study_H1                             % table + figures (sim/out/H1, c
 frontend_sizing_H1                              % sensor resistor values and datasheet-limit checks
 ```
 
+## H2: the sensor and ADC study in Simulink (31 Oct 2026)
+
+The same 16 options as H1, now in MATLAB/Simulink: `apf_system_H2.slx` is `apf_system.slx` plus a
+"Sensors + ADC (H2)" block, plus a 0-200 us delay sweep. Report: [docs/sensor_adc_study_H2.md](docs/sensor_adc_study_H2.md).
+
+- With an ideal ADC, `apf_system_H2` matches `apf_system.slx` exactly, and moving the ADC delivery time changes nothing.
+- Same ranking as H1. Recommended chain: LEM sensors into an AD7606B/AD7606 on the **+-10 V range**, giving
+  4.6-4.7 % / 3.5 % grid THD (33 / 22 ohm). The +-5 V range sits at the 5 % limit at 33 ohm.
+- Up to 10 us of delay before the sample costs nothing. 5 % at 33 ohm is passed at 15 us.
+  The ups and downs of the sweep repeat with another noise seed, so they are real (steps about every 50 us, half the PWM period).
+- The cRIO NI 9244/9246 still trips the inverter.
+
+```matlab
+cd matlab
+sensor_adc_study_H2       % builds the model if needed, ~10 min for 102 runs, then table + figures
+```
+
 ## Rerun
 
 Questa (Transcript, from this folder):

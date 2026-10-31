@@ -1,0 +1,18 @@
+chain,description,thd33_pct,std33,thd22_pct,std22,vdc_dip_V,faults
+S0_ideal,"Ideal sensors, 12-bit ADC",4.89,0.12,3.61,0.08,13.3,0000
+S1_LEM_AD7606,"LEM LV 25-P + LA 25-NP, AD7606 (simultaneous)",4.91,0.08,3.6,0.07,13.2,0000
+S2_LEM_LTC2308,"LEM sensors, LTC2308 (multiplexed, 2 us/ch)",4.91,0.09,3.63,0.04,14.4,0000
+S3_isoamp_AD7606,"Isolated-amp voltage + LA 25-NP, AD7606",4.94,0.2,3.6,0.07,13.4,0000
+S4_cRIO_NI9215,"LEM sensors, cRIO NI 9215 + link to DE2-115",4.91,0.08,3.6,0.07,13.2,0000
+S5_cRIO_NI9244,"cRIO NI 9244/9246 delta-sigma (0.8 ms delay)",28.09,0,27.46,0,92.9,0011
+S6_LEM_AD7606_noisy,"As S1 with 3 counts rms noise",4.87,0.08,3.58,0.05,13.9,0000
+S7_delay100us,"As S1 + 100 us extra delay",8.2,0.15,6.71,0.03,13.8,0000
+S8_delay200us,"As S1 + 200 us extra delay",16.86,0.16,16.52,0.13,13.5,0000
+S9_delay400us,"As S1 + 400 us extra delay",32.99,0.61,49.18,0.47,15.5,0000
+S10_LEM_AD7606_real,"LEM + AD7606 +-5 V, all real lags",5.01,0.22,3.55,0.12,13.1,0000
+S11_AD7606_10V,"As S10 on the AD7606 +-10 V range",4.57,0.11,3.47,0.13,12.8,0000
+S12_AD7606B_10V,"As S10 with AD7606B, +-10 V range",4.68,0.1,3.49,0.1,12.7,0000
+S13_fastV_AD7606,"As S10 with a fast grid-voltage sensor",5.23,0.16,3.69,0.12,13.1,0000
+S14_delay30us,"As S1 + 30 us extra delay",5.7,0.15,3.93,0.06,14.4,0000
+S15_delay50us,"As S1 + 50 us extra delay",5.47,0.09,3.54,0.07,13.5,0000
+R0_no_ADC,"Reference: ideal sensors and ideal ADC (= apf_system.slx)",4.85,0.14,3.59,0.09,13.3,0000
