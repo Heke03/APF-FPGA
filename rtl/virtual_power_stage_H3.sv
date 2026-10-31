@@ -16,7 +16,7 @@
 //   3  phase b cosine, a voltage; DC-link terms; read c
 //   4  phase c cosine, b voltage          5  c voltage
 //   6  inductor voltages, diode-bridge DC voltage
-//   7  inverter currents, DC link, load DC current
+//   7  inverter currents, DC link, load DC current; first part of the load phase currents
 //   8  phase c inverter current, load phase currents
 //   9  publish outputs and ADC codes, step_done
 module virtual_power_stage_H3 #(
@@ -175,15 +175,22 @@ module virtual_power_stage_H3 #(
         idq_next = 33'(idq) + 33'((dprod + 45'sd32768) >>> 16);
     end
 
-    // ph 8: load phase currents follow +-idq on the max/min phases
-    logic signed [32:0] tdiff [0:2];
-    logic signed [44:0] tprod [0:2];
+    // ph 8: load phase currents follow +-idq on the max/min phases:
+    //   ilq += rsh(KT * (s*idq - ilq), 20), s = +1 (max phase), -1 (min phase), 0.
+    // Written as (ilq * 2^20 + 2^19 - KT * ilq + s * KT * idq) >>> 20 so that only
+    // the idq term is left for ph 8: ilbase_r (the rest) is computed at ph 7, when
+    // ilq is not changing. The low 20 bits of ilq * 2^20 are zero, so the rounding
+    // constant is just a concatenation.
+    logic signed [52:0] ilbase [0:2], ilbase_r [0:2];
+    logic signed [44:0] idkt;
+    logic signed [52:0] ilsum [0:2];
     always_comb begin
+        idkt = 45'(idq) * 45'(KT);
         for (int p = 0; p < 3; p++) begin
-            if (p == imax_r)      tdiff[p] = 33'(idq) - 33'(ilq[p]);
-            else if (p == imin_r) tdiff[p] = 33'sd0 - 33'(idq) - 33'(ilq[p]);
-            else                  tdiff[p] = 33'sd0 - 33'(ilq[p]);
-            tprod[p] = 45'(tdiff[p]) * 45'(KT);
+            ilbase[p] = 53'($signed({ilq[p], 20'h80000})) - 53'(45'(ilq[p]) * 45'(KT));
+            if (p == imax_r)      ilsum[p] = ilbase_r[p] + 53'(idkt);
+            else if (p == imin_r) ilsum[p] = ilbase_r[p] - 53'(idkt);
+            else                  ilsum[p] = ilbase_r[p];
         end
     end
 
@@ -217,6 +224,7 @@ module virtual_power_stage_H3 #(
             for (int p = 0; p < 3; p++) vx_r[p] <= '0;
             top_r <= '0; kc_r <= '0; leak_r <= '0;
             dv_r[0] <= '0; dv_r[1] <= '0; dvd_r <= '0; imax_r <= '0; imin_r <= '0;
+            for (int p = 0; p < 3; p++) ilbase_r[p] <= '0;
             step_done <= 1'b0; shoot_count <= '0;
             vdc <= $signed(VDC0);
             for (int p = 0; p < 3; p++) begin vg[p] <= '0; il[p] <= '0; i_inv[p] <= '0; end
@@ -262,11 +270,12 @@ module virtual_power_stage_H3 #(
                                                    + 32'(g_lo[0]) + 32'(g_lo[1]) + 32'(g_lo[2]);
                     end
                     idq <= (idq_next < 0) ? 32'sd0 : 32'(idq_next);
+                    for (int p = 0; p < 3; p++) ilbase_r[p] <= ilbase[p];
                 end
                 4'd8: begin
                     if (g_con) ifq[2] <= -(ifq[0] + ifq[1]);
                     for (int p = 0; p < 3; p++)
-                        ilq[p] <= ilq[p] + 32'((tprod[p] + (45'sd1 <<< 19)) >>> 20);
+                        ilq[p] <= 32'(ilsum[p] >>> 20);
                 end
                 4'd9: begin
                     for (int p = 0; p < 3; p++) begin

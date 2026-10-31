@@ -4,10 +4,13 @@
 #
 # Example (from the APF_FPGA folder):
 #   .\quartus\check_timing.ps1 -Top three_phase_pwm -Files rtl\three_phase_pwm.sv
+#   For the DE2-115 chip add: -Family 'Cyclone IV E' -Device EP4CE115F29C7
 param(
     [Parameter(Mandatory)] [string]   $Top,
     [Parameter(Mandatory)] [string[]] $Files,
     [string] $Clock = 'clk',
+    [string] $Family = 'Cyclone V',
+    [string] $Device = '5CSEMA5F31C6',
     [hashtable] $Parameters = @{},   # e.g. @{ COS_FILE = 'rtl/cos_table_4096.hex' } (paths relative to APF_FPGA)
     [string] $QuartusBin = ''          # default: found from QUARTUS_ROOTDIR (set by the Quartus installer)
 )
@@ -21,12 +24,13 @@ if (-not $QuartusBin) {
     else { throw 'Quartus not found: install Quartus Prime Lite or pass -QuartusBin <folder with quartus_sh.exe>' }
 }
 $dir = Join-Path $PSScriptRoot "check_$Top"
+if ($Device -ne '5CSEMA5F31C6') { $dir += "_$Device" }
 New-Item -ItemType Directory -Force $dir | Out-Null
 
 $lines = @(
     "project_new $Top -overwrite",
-    'set_global_assignment -name FAMILY "Cyclone V"',
-    'set_global_assignment -name DEVICE 5CSEMA5F31C6',
+    "set_global_assignment -name FAMILY `"$Family`"",
+    "set_global_assignment -name DEVICE $Device",
     "set_global_assignment -name TOP_LEVEL_ENTITY $Top",
     "set_global_assignment -name SDC_FILE $Top.sdc",
     'set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL'
@@ -56,7 +60,7 @@ try {
         $out | Select-String 'Error \(|was successful|lpm_divide|uninferred' | ForEach-Object { "[$tool] " + $_.Line.Trim() }
         if ($LASTEXITCODE -ne 0) { throw "$tool failed" }
     }
-    Get-Content "$Top.fit.summary" | Select-String 'ALMs|Total registers|block memory|DSP'
+    Get-Content "$Top.fit.summary" | Select-String 'ALMs|logic elements|Total registers|memory bits|DSP|Multiplier'
     $sta = Get-Content "$Top.sta.summary"
     for ($i = 0; $i -lt $sta.Count; $i++) {
         if ($sta[$i] -match "Type\s*:\s*(.*Model (Setup|Hold) '$Clock')") { "{0,-45} {1}" -f $Matches[1], $sta[$i + 1].Trim() }

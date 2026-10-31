@@ -26,7 +26,8 @@ First time on a new PC:
    This creates APF_FPGA.mpf with that PC's paths and compiles everything.
 4. Later, use **File > Open > Project > APF_FPGA.mpf**.
 
-**Share:** tl/, sim/*.sv, sim/*.do, sim/*.txt, model/*.py,
+**Share:** 
+tl/, sim/*.sv, sim/*.do, sim/*.txt, model/*.py,
 quartus/check_timing.ps1, quartus/apf_reference_check.qpf/.qsf/.sdc and this README.
 
 **Don't share** (generated on each PC; listed in .gitignore): work/, *.mpf,
@@ -290,8 +291,11 @@ them in closed loop. Progress and results are in [docs/H3_progress.md](docs/H3_p
   Grid THD is 4.43 % / 3.50 % (33 / 22 ohm), against 4.85 % / 3.59 % with the Simscape plant.
   The difference comes from the simpler diode commutation model.
 - **Step 2, FPGA code:** `rtl/virtual_power_stage_H3.sv` matches the MATLAB model bit for bit over 200,000 steps.
-  With `apf_core` in closed loop (Questa, 1 s) it gives 4.40 % / 3.51 % grid THD with no faults. It meets 50 MHz on Cyclone V (+2.98 ns).
-- **Steps 3-4, still to do:** DE2-115 top level (needs Cyclone IV E support in Quartus), then a board test.
+  With `apf_core` in closed loop (Questa, 1 s) it gives 4.40 % / 3.51 % grid THD with no faults.
+- **Step 3, in progress:** Cyclone IV E support is installed. On the DE2-115 chip (EP4CE115F29C7) the design uses
+  7 % of the logic and 35 % of the multipliers, and meets 50 MHz with +1.93 ns at 85 C, after three long
+  one-clock calculations were split (same results, checked bit-exact). Next: the board top level.
+- **Step 4, still to do:** test on the board.
 
 ```matlab
 cd matlab

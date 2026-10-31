@@ -9,7 +9,7 @@ Decided with the user on 31 Oct 2026; the presentation format is still to be dec
 |---|---|---|
 | 1 | MATLAB/Simulink model of the VPS in fixed point, checked against the Simscape model | **done** |
 | 2 | FPGA code for the VPS (+ ADC code converter), bit-exact against the MATLAB model; closed loop with `apf_core` in Questa | **done** |
-| 3 | DE2-115 top level: Cyclone IV support in Quartus (**needs the user's OK to install**), pins from Terasic's list, switches/LEDs/7-seg, compile, timing | waiting |
+| 3 | DE2-115 top level: Cyclone IV support in Quartus, timing on the real chip, pins from Terasic's list, switches/LEDs/7-seg, compile | in progress: Cyclone IV installed, timing fixed; top level next |
 | 4 | Test on the board together with the user (Signal Tap instead of an oscilloscope) | waiting |
 
 ## Step 1 result (31 Oct 2026)
@@ -80,15 +80,54 @@ The first version failed timing by 2 ns: one path did the inverter voltages, the
 currents, a multiply and the Vdc update all in one clock. It now spreads them over three
 extra clocks of the 10-clock step.
 
-**Things to check in step 3 (Cyclone IV E on the DE2-115):**
+Both open questions from step 2 were answered on the real chip in step 3 (below).
 
-- **Clock speed:** the Cyclone IV E is slower than the Cyclone V, so the +2.98 ns may shrink or go negative. If it does, there's room to pipeline more: the plant step has 10 clocks and most of them are short.
-- **Multipliers:** the EP4CE115 has 266 18x18 multipliers but no 27x27 blocks, so the wide products will take more of them. It should fit; the compile will tell.
+## Step 3 progress (31 Oct 2026)
+
+**Cyclone IV E support installed** (with the user's OK): `cyclone-25.1std.0.1129.qdz`, 466 MB, added to Quartus
+Prime Lite 25.1std with the Device Installer. Quartus now knows the DE2-115 chip, EP4CE115F29C7.
+`quartus/check_timing.ps1` takes `-Family 'Cyclone IV E' -Device EP4CE115F29C7` for it.
+
+**First compile of `apf_vps_system_H3` on EP4CE115F29C7:** it fits easily, but setup timing failed at the hot corner.
+
+| Check | Value |
+|---|---|
+| Logic elements | 8,140 / 114,480 (7 %) |
+| Multipliers (9-bit elements) | 180 / 532 (34 %) |
+| Memory bits | 158 kbit (4 %) |
+| Setup slack, slow model 85 °C | **-1.43 ns** |
+| Setup slack, slow model 0 °C | +0.63 ns |
+
+The slow paths were each one long calculation done in a single clock:
+
+| File | Calculation in one clock | Fix | Check after the fix |
+|---|---|---|---|
+| `rtl/current_controller.sv` | DC-link PI: ramp, error, integrator, clamp, command, clamp | split over `DC_LOOP`, `DC_INTEG`, `DC_CMD` | (runs once per grid cycle, so 2 extra clocks change nothing) |
+| `rtl/srf_pll.sv` | PI, frequency clamp, angle advance | split over `LOOP`, `FREQ`, `ADVANCE` (87 clocks per frame instead of 85) | PLL test: 11,000 frames bit-exact against `model/pll_model.py` |
+| `rtl/virtual_power_stage_H3.sv` | load phase current update: subtract, multiply, round, add | the part without `idq` moves to ph 7, and the rounding constant is folded into the add | VPS test: 200,000 steps, 0 mismatches |
+
+Same math, same rounding, so the results don't change, only when each part is computed.
+
+**After the fix, on EP4CE115F29C7:**
+
+| Check | Value |
+|---|---|
+| Setup slack, slow 85 °C | **+1.93 ns** |
+| Setup slack, slow 0 °C | +3.63 ns |
+| Setup slack, fast 0 °C | +11.38 ns |
+| Hold slack (worst) | +0.14 ns |
+| Logic elements | 8,214 (7 %) |
+| Multipliers | 184 / 532 (35 %) |
+
+**Same results after the fix:** the 1 s closed-loop run (`sim/tb_apf_vps_H3.sv`) gives a CSV that is
+byte-for-byte identical to the one before the fix (SHA1 `865b612e...`). `vps_check_H3` and `vps_rtl_check_H3`
+were rerun in MATLAB, with the same numbers as in step 2.
+
+Next: the DE2-115 top level (switches, LEDs, 7-segment displays, Terasic pin list).
 
 ## Notes for whoever continues
 
 - The VPS takes one step every 200 ns (10 clocks at 50 MHz). Every product is rounded with
   `(x + (1 << (s-1))) >>> s`, and every product stays below 2^53, so MATLAB doubles match the FPGA exactly.
 - The cosine table is `rtl/cos_table_4096.hex`: 4096 points per turn, peak 65536, stored as 5 hex digits of which the FPGA keeps the low 18 bits.
-- Don't start the Cyclone IV install without asking the user (they stopped it once).
 - After any MATLAB batch run, check for leftover MATLABWindow processes.

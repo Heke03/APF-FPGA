@@ -9,7 +9,7 @@
 // arrived yet, so a block that captures them on the same strobe as this PLL
 // (for example apf_reference) gets the angle of that sample.
 //
-// Bit-accurate model: model/pll_model.py. About 85 clocks per frame.
+// Bit-accurate model: model/pll_model.py. About 87 clocks per frame.
 //
 // Formats: voltages are signed ADC counts (offset removed); cos/sin are Q16
 // (+65536 = +1.0); phase_error is sin(angle error) in Q16; theta is a full
@@ -65,7 +65,7 @@ module srf_pll #(
     localparam logic [31:0] ADDR_ROUND = 32'd1 << 19;
 
     typedef enum logic [3:0] {
-        INIT, IDLE, PRODUCTS, PROJECT, SQUARES, ROOT, DIVIDE, SIGN, LOOP, TRIG, PUBLISH
+        INIT, IDLE, PRODUCTS, PROJECT, SQUARES, ROOT, DIVIDE, SIGN, LOOP, FREQ, ADVANCE, TRIG, PUBLISH
     } state_t;
     state_t state;
 
@@ -97,6 +97,7 @@ module srf_pll #(
     logic signed [17:0] err;
     logic low_amp;
     logic signed [33:0] integ, integ_sum, integ_next;
+    logic signed [34:0] kp_err;                 // KP * err, registered in LOOP
     logic signed [34:0] freq_sum;
     logic [31:0] freq_next;
     logic [8:0] lock_count;
@@ -118,7 +119,8 @@ module srf_pll #(
         if (integ_sum > INTEG_MAX)       integ_next = INTEG_MAX;
         else if (integ_sum < -INTEG_MAX) integ_next = -INTEG_MAX;
         else                             integ_next = integ_sum;
-        freq_sum = 35'($signed({3'b000, NOM_WORD})) + 35'(KP) * 35'(err) + 35'(integ_next >>> KI_FRAC);
+        // Used in FREQ, after LOOP has stored integ_next in integ.
+        freq_sum = 35'($signed({3'b000, NOM_WORD})) + kp_err + 35'(integ >>> KI_FRAC);
         if (freq_sum < 35'($signed({3'b000, FREQ_MIN})))      freq_next = FREQ_MIN;
         else if (freq_sum > 35'($signed({3'b000, FREQ_MAX}))) freq_next = FREQ_MAX;
         else                                                  freq_next = freq_sum[31:0];
@@ -149,7 +151,7 @@ module srf_pll #(
             dividend <= '0; div_rem <= '0; quotient <= '0;
             step <= '0;
             err <= '0; low_amp <= 1'b1;
-            integ <= '0;
+            integ <= '0; kp_err <= '0;
             lock_count <= '0; unlock_count <= '0;
             trig_idx <= '0;
             have_result <= 1'b0;
@@ -247,10 +249,11 @@ module srf_pll #(
                     err <= vq_s[26] ? -$signed({1'b0, quotient[16:0]}) : $signed({1'b0, quotient[16:0]});
                     state <= LOOP;
                 end
+                // PI loop and phase advance, split over LOOP, FREQ and ADVANCE so
+                // each step fits in one 50 MHz period.
                 LOOP: begin
                     integ <= integ_next;
-                    freq_word <= freq_next;
-                    theta <= theta + freq_next;
+                    kp_err <= 35'(KP) * 35'(err);
                     if (!ok_q) begin
                         angle_valid <= 1'b0;
                         lock_count <= '0;
@@ -274,6 +277,14 @@ module srf_pll #(
                         end else
                             unlock_count <= '0;
                     end
+                    state <= FREQ;
+                end
+                FREQ: begin
+                    freq_word <= freq_next;
+                    state <= ADVANCE;
+                end
+                ADVANCE: begin
+                    theta <= theta + freq_word;
                     have_result <= 1'b1;
                     trig_idx <= '0;
                     state <= TRIG;

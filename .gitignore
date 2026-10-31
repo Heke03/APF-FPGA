@@ -29,4 +29,5 @@ quartus/*.pin
 matlab/slprj/
 *.slxc
 *.asv
+*.autosave
 matlab/results/

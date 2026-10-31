@@ -58,7 +58,7 @@ module current_controller #(
 
     typedef enum logic [3:0] {
         IDLE, DIVIDE, UPREV1, UPREV2, PREDICT1, PREDICT2, REFER, CONTROL1, CONTROL2,
-        OFFSET, DUTY1, DUTY2, FINISH, DC_LOOP
+        OFFSET, DUTY1, DUTY2, FINISH, DC_LOOP, DC_INTEG, DC_CMD
     } state_t;
     state_t state;
 
@@ -98,6 +98,7 @@ module current_controller #(
     logic [CNT_W-1:0] vdc_cnt;
     logic avg_ok;
     logic signed [31:0] dc_integ;
+    logic signed [13:0] dc_err;
 
     logic [IDX_W-1:0] wr_idx, rd_idx;
     logic [CNT_W-1:0] fill;
@@ -156,7 +157,7 @@ module current_controller #(
             off <= '0;
             wr_idx <= '0; fill <= '0;
             vdc_sum <= '0; vdc_cnt <= '0; avg_ok <= 1'b0; vdc_avg <= '0;
-            vdc_target <= '0; dc_integ <= '0; idc_cmd <= '0;
+            vdc_target <= '0; dc_integ <= '0; dc_err <= '0; idc_cmd <= '0;
             duty_valid <= 1'b0;
             duty_a <= 16'(HALF_TICKS / 2); duty_b <= 16'(HALF_TICKS / 2); duty_c <= 16'(HALF_TICKS / 2);
         end else begin
@@ -288,29 +289,36 @@ module current_controller #(
                         state <= IDLE;
                     end
                 end
+                // Once per grid cycle: ramp the target, then PI on the cycle average.
+                // Split over three clocks so each step fits in one 50 MHz period.
                 DC_LOOP: begin
-                    // Once per grid cycle: ramp the target, then PI on the cycle average.
                     if (!run_q) begin
                         vdc_target <= vdc_avg;
                         dc_integ <= '0;
                         idc_cmd <= '0;
+                        state <= IDLE;
                     end else begin
                         logic [11:0] tgt;
-                        logic signed [13:0] err;
-                        logic signed [31:0] acc;
-                        logic signed [31:0] cmd;
                         tgt = (vdc_target + VDC_RAMP >= VDC_REF) ? 12'(VDC_REF) : 12'(vdc_target + VDC_RAMP);
-                        err = $signed({2'b0, tgt}) - $signed({2'b0, vdc_avg});
-                        acc = dc_integ + 32'(err) * KI_DC;
-                        if (acc > ACC_MAX) acc = ACC_MAX;
-                        else if (acc < -ACC_MAX) acc = -ACC_MAX;
-                        cmd = 32'(err) * KP_DC + (acc >>> 8);
-                        if (cmd > IDC_MAX) cmd = IDC_MAX;
-                        else if (cmd < -IDC_MAX) cmd = -IDC_MAX;
                         vdc_target <= tgt;
-                        dc_integ <= acc;
-                        idc_cmd <= 16'(cmd);
+                        dc_err <= $signed({2'b0, tgt}) - $signed({2'b0, vdc_avg});
+                        state <= DC_INTEG;
                     end
+                end
+                DC_INTEG: begin
+                    logic signed [31:0] acc;
+                    acc = dc_integ + 32'(dc_err) * KI_DC;
+                    if (acc > ACC_MAX) acc = ACC_MAX;
+                    else if (acc < -ACC_MAX) acc = -ACC_MAX;
+                    dc_integ <= acc;
+                    state <= DC_CMD;
+                end
+                DC_CMD: begin
+                    logic signed [31:0] cmd;
+                    cmd = 32'(dc_err) * KP_DC + (dc_integ >>> 8);
+                    if (cmd > IDC_MAX) cmd = IDC_MAX;
+                    else if (cmd < -IDC_MAX) cmd = -IDC_MAX;
+                    idc_cmd <= 16'(cmd);
                     state <= IDLE;
                 end
                 default: state <= IDLE;
