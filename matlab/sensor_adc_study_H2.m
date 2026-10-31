@@ -88,6 +88,7 @@ if ~isempty(todo)
     out = parsim(in, 'ShowProgress', 'on', 'TransferBaseWorkspaceVariables', 'on', ...
         'SetupFcn', @() addpath(here));
     fprintf('Simulations took %.1f min\n', toc / 60);
+    delete(gcp('nocreate'));            % close the workers (their window processes stay otherwise)
     for j = 1:numel(out)
         k = todo(j);
         if ~isempty(out(j).ErrorMessage)
@@ -237,7 +238,11 @@ for k = 1:numel(figs)
     copyfile(fullfile(outdir, figs{k}), fullfile(docdir, 'figures', figs{k}));
 end
 fprintf('\nFigures in %s (copied to docs/figures), table in docs/sensor_adc_study_H2_results.csv\n', outdir);
-if usejava('desktop'), set(findall(0, 'Type', 'figure', 'Visible', 'off'), 'Visible', 'on'); end
+if usejava('desktop')
+    set(findall(0, 'Type', 'figure', 'Visible', 'off'), 'Visible', 'on');
+else
+    close all                           % matlab -batch: do not leave figure processes behind
+end
 
 
 %% ---- helper functions ----
