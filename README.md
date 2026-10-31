@@ -280,6 +280,32 @@ cd matlab
 sensor_adc_study_H2       % builds the model if needed, ~10 min for 102 runs, then table + figures
 ```
 
+## H3: virtual power stage, the APF running on the DE2-115 alone (31 Oct 2026)
+
+The board is to be tested at home with nothing connected to it. The grid, the diode-bridge load
+and the inverter are computed inside the FPGA (the "virtual power stage"), and `apf_core` controls
+them in closed loop. Progress and results are in [docs/H3_progress.md](docs/H3_progress.md).
+
+- **Step 1, MATLAB model:** `apf_vps_H3.slx` is the `apf_system.slx` controller driving the VPS in fixed point.
+  Grid THD is 4.43 % / 3.50 % (33 / 22 ohm), against 4.85 % / 3.59 % with the Simscape plant.
+  The difference comes from the simpler diode commutation model.
+- **Step 2, FPGA code:** `rtl/virtual_power_stage_H3.sv` matches the MATLAB model bit for bit over 200,000 steps.
+  With `apf_core` in closed loop (Questa, 1 s) it gives 4.40 % / 3.51 % grid THD with no faults. It meets 50 MHz on Cyclone V (+2.98 ns).
+- **Steps 3-4, still to do:** DE2-115 top level (needs Cyclone IV E support in Quartus), then a board test.
+
+```matlab
+cd matlab
+build_apf_vps_H3          % builds apf_vps_H3.slx
+vps_check_H3              % fixed point vs real numbers vs Simscape, ~3 min
+vps_vectors_H3            % test inputs and expected outputs for the FPGA code
+```
+```tcl
+vsim -c -do sim/run_vps_H3.do     # bit-exact check (~1 min), then the 1 s closed loop (~10 min)
+```
+```matlab
+vps_rtl_check_H3          % closed loop on the FPGA code against the Simulink runs
+```
+
 ## Rerun
 
 Questa (Transcript, from this folder):

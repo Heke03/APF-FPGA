@@ -1,5 +1,6 @@
 # Generated on each PC - do not share (they contain that PC's paths or are rebuilt anyway)
 work/
+work_h3/
 transcript
 *.wlf
 wlft*
