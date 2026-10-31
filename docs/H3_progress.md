@@ -146,6 +146,69 @@ of 4.4 %), because it also counted harmonics above 40 from the commutation notch
 On known test signals (harmonics up to 40) the meter is within 0.03 points of the exact THD. It is section 5 of
 `run_H3` in the user's MATLAB folder. Next: `rtl/thd_meter_H3.sv`, bit-exact with this MATLAB code.
 
+**Part 2: board code.**
+
+| File | What it does |
+|---|---|
+| `rtl/thd_meter_H3.sv` | the THD meter: 3 clocks per harmonic per sample, 40 sums in one RAM, then powers, a 24-step division and a 14-step square root (about 330 clocks after the last sample of a window; samples come every 5000) |
+| `rtl/thd_table_200.hex` | its cos/sin table, written by `matlab/thd_vectors_H3.m` |
+| `rtl/apf_vps_system_H3.sv` | now also holds the meter, sampling grid current a (`il - i_inv`) on `adc_start`, and the peak grid current over the same 0.1 s |
+| `rtl/display_H3.sv` | the 8 digits: DC link in whole volts on the left, one reading on the right; binary to decimal by double dabble, values refreshed every 0.2 s |
+| `rtl/de2_115_top_H3.sv` | the board level: KEY0 reset (also at power-up), SW0..SW4 synchronized and debounced (10 ms), LEDs, displays |
+
+Two changes to the agreed layout, both forced by the board:
+- **No decimal point.** The DE2-115 digits have only the 7 segment pins (Terasic's pin list has `HEX0[0..6]` ...
+  `HEX7[0..6]`, no dot). The decimal point is shown as a bottom bar in its own digit: `4_40` = 4.40 %, `26_1` =
+  26.1 % (from 10 on there is room for one decimal, rounded), `50_0` = 50.0 Hz. The DC link is shown in whole volts (` 301`).
+- **Four right-display choices, not five.** SW4..SW3 give 4 settings: 00 THD, 01 PLL frequency, 10 peak grid
+  current, 11 shoot-through count. The fault code is already on LEDR3..0, so it has no display setting.
+
+**Part 3: pins.** `quartus/de2_115_pins_H3.tcl` holds the 106 pins the design uses (CLOCK_50, KEY, SW, LEDG,
+LEDR, HEX0..7), copied with their I/O standards from Terasic's `DE2_115.qsf` (made by the Terasic System Builder).
+Every pin matched a second, independent DE2-115 project file (106 of 106) and a third (28 of 28).
+`quartus/build_de2_115_H3.ps1` makes the project, sets every unused pin to "As input tri-stated", compiles,
+and checks the pin report.
+
+| Check (EP4CE115F29C7, whole board design) | Value |
+|---|---|
+| Logic elements | 10,098 / 114,480 (9 %) |
+| Multipliers (9-bit elements) | 221 / 532 (42 %) |
+| Memory bits | 168 kbit (4 %) |
+| Setup slack, slow 85 °C / slow 0 °C / fast 0 °C | +1.77 / +3.51 / +11.24 ns |
+| Hold slack (worst) | +0.13 ns |
+| Outputs | 83: LEDG, LEDR and HEX only (plus the chip's own configuration/JTAG pins) |
+| Unused pins | As input tri-stated |
+| Build time | about 1 minute |
+
+**Part 4: tests** (`sim/run_board_H3.do`, then `board_check_H3` in MATLAB):
+
+| Test | Result |
+|---|---|
+| `tb_thd_meter_H3`: FPGA meter vs `thd_meter_H3.m`, 14 signals (clean, APF on/off, too small, over 100 %, 30 A, noise, h = 45) | 14 of 14 readings identical |
+| `tb_display_H3`: every reading 0..9999 in every format, every DC-link code | 60,000 checks, 0 wrong |
+| `tb_de2_115_H3`: the board top level with the demo sequence on KEY0 and the switches, 1.13 s | 16 of 16 checks OK (12 min) |
+| `board_check_H3`: the board's THD readings recomputed in MATLAB from the samples the board took | 11 of 11 identical |
+
+What the board shows in that simulation (left: DC link in V; right: grid THD, `_` = decimal point):
+
+| Time | Display | LEDG 3..0 | What is happening |
+|---|---|---|---|
+| 0.05 s | ` 172 ----` | 0001 | PLL locked, DC link at the 173 V precharge, no reading yet |
+| 0.15 s | ` 202 22_4` | 0111 | switching since 80 ms; first reading (0-0.1 s, mostly before the filter started) |
+| 0.25 s | ` 253 2_74` | 0111 | DC link charging to 300 V |
+| 0.65 s | ` 299 4_41` | 0111 | steady state, 33 ohm |
+| 0.62 s, SW4..3 = 01 / 10 / 11 | `50_0` / `6_10` / `   0` | | PLL frequency, peak grid current, shoot-through count |
+| 0.75 s | ` 291 4_53` | 1111 | SW1 up at 0.7 s: 22 ohm, the DC link dips and recovers |
+| 0.95 s | ` 295 14_8` | 1011 | SW0 down at 0.85 s: filter off (this reading is half on, half off) |
+| 1.05 s | ` 294 26_0` | 1011 | filter off: the grid carries the load current, 26 % THD |
+| after KEY0 | ` 173 ----` | 1000 | reset: back to the precharge; LEDG3 stays on because SW1 is still up |
+
+No faults and no shoot-through at any time. Found while testing: during reset `adc_start` (the PWM
+`frame_start`) is high on every clock. Harmless, because the meter is held in reset too, but a testbench
+that logs samples has to skip the reset.
+
+Next: part 5, Signal Tap capture and a MATLAB plot of the captures, then step 4 on the board.
+
 ## Notes for whoever continues
 
 - The VPS takes one step every 200 ns (10 clocks at 50 MHz). Every product is rounded with

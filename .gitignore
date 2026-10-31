@@ -31,3 +31,6 @@ matlab/slprj/
 *.asv
 *.autosave
 matlab/results/
+
+# DE2-115 build (rebuilt by quartus/build_de2_115_H3.ps1)
+quartus/de2_115_H3/

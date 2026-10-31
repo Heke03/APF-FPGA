@@ -292,9 +292,12 @@ them in closed loop. Progress and results are in [docs/H3_progress.md](docs/H3_p
   The difference comes from the simpler diode commutation model.
 - **Step 2, FPGA code:** `rtl/virtual_power_stage_H3.sv` matches the MATLAB model bit for bit over 200,000 steps.
   With `apf_core` in closed loop (Questa, 1 s) it gives 4.40 % / 3.51 % grid THD with no faults.
-- **Step 3, in progress:** Cyclone IV E support is installed. On the DE2-115 chip (EP4CE115F29C7) the design uses
-  7 % of the logic and 35 % of the multipliers, and meets 50 MHz with +1.93 ns at 85 C, after three long
-  one-clock calculations were split (same results, checked bit-exact). Next: the board top level.
+- **Step 3, board design:** Cyclone IV E support is installed, and three long one-clock calculations were split
+  so the design meets 50 MHz on the DE2-115 chip (same results, checked bit-exact). `rtl/de2_115_top_H3.sv` puts
+  it on the board: KEY0 reset, SW0 run, SW1 load step, SW2 ADC noise, SW4..3 choose the right display; DC link
+  on the left display; THD of the grid current (`rtl/thd_meter_H3.sv`, bit-exact with `matlab/thd_meter_H3.m`),
+  PLL frequency, peak current or shoot-through count on the right; status, gate and fault LEDs. Pins come from
+  Terasic's DE2-115 pin list; unused pins are inputs. 9 % of the logic, +1.77 ns slack at 85 C.
 - **Step 4, still to do:** test on the board.
 
 ```matlab
@@ -308,6 +311,19 @@ vsim -c -do sim/run_vps_H3.do     # bit-exact check (~1 min), then the 1 s close
 ```
 ```matlab
 vps_rtl_check_H3          % closed loop on the FPGA code against the Simulink runs
+```
+Board design:
+```matlab
+thd_vectors_H3            % THD meter table (rtl/thd_table_200.hex) and test vectors
+```
+```tcl
+vsim -c -do sim/run_board_H3.do   # THD meter bit-exact, displays, the board top level with the demo sequence (~14 min)
+```
+```matlab
+board_check_H3            % the board's THD readings against the MATLAB meter
+```
+```powershell
+.\quartus\build_de2_115_H3.ps1   # builds quartus\de2_115_H3\output_files\de2_115_top_H3.sof (~1 min)
 ```
 
 ## Rerun
