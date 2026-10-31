@@ -1,4 +1,4 @@
-function vps_vectors_H3(T)
+function out = vps_vectors_H3(T)
 % H3: test vectors for the bit-exact check of rtl/virtual_power_stage_H3.sv.
 % Runs the fixed-point reference (blocks/vps_block_H3.m) step by step with a
 % stimulus that exercises every branch, and writes one line per 200 ns step to
@@ -9,6 +9,7 @@ function vps_vectors_H3(T)
 % with every line.
 %
 %   >> vps_vectors_H3          % 40 ms = 200 000 steps
+%   >> out = vps_vectors_H3;   % also returns the table written to the file
 %
 % Stimulus (open-loop PWM, 10 kHz, 2 us dead time, modulation 0.95 in phase with the grid):
 %   0-2 ms      disconnected, gates off          (plant alone)
