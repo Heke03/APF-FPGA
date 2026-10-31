@@ -207,7 +207,23 @@ No faults and no shoot-through at any time. Found while testing: during reset `a
 `frame_start`) is high on every clock. Harmless, because the meter is held in reset too, but a testbench
 that logs samples has to skip the reset.
 
-Next: part 5, Signal Tap capture and a MATLAB plot of the captures, then step 4 on the board.
+**Part 5: waveform recording on the board.** Instead of Signal Tap, the design records into its own on-chip
+memories, which the PC reads over the USB-Blaster cable while the design runs (In-System Memory Content
+Editor, scripted). Signal Tap would need a hand-written .stp file and its GUI for every capture; this way one
+MATLAB command reads the board and plots.
+
+| File | What it does |
+|---|---|
+| `rtl/capture_H3.sv` | records grid, load and inverter current a, DC link and grid voltage a at the meter's sample instants (10 kHz) into a ring of 16384 samples. Flipping SW0..SW2 lets it record 8192 more and stop (0.82 s before and after); LEDG8 then lights. KEY1 starts a new recording. Six JTAG-readable memories: IG, IL, II, VD, VG and INF (status, trigger address, the THD meter's window position) |
+| `quartus/read_capture_H3.tcl` | `quartus_stp` script: finds the USB-Blaster and the EP4CE115, reads the six memories, writes them in address order |
+| `matlab/load_capture_H3.m` | turns the files into time-aligned signals in A and V, and the meter's window starts |
+| `matlab/capture_check_H3.m` | checks the recordings of the board simulation against the samples the meter took |
+| `Desktop\matlab\4_Board_Test_H3\run_board_H3.m` | the user's Live Script: reads the board (or shows the simulated recordings), plots against the Questa run, and lists the THD the display showed |
+
+With the recorder: 10 % of the logic, 37 % of the memory bits (1.48 Mbit), setup slack +2.19 ns at 85 °C.
+The JTAG data pin is then called `altera_reserved_tdo` in the pin report (still the chip's own JTAG pin).
+
+Next: step 4 on the board.
 
 ## Notes for whoever continues
 

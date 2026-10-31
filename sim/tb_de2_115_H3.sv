@@ -2,17 +2,21 @@
 // KEY0 and the switches in, the LEDs and the 7-segment displays read back.
 // Demo sequence:
 //   0        KEY0 pressed and released (reset)
-//   10 ms    SW0 up: run, the filter starts
+//   10 ms    SW0 up: run, the filter starts (and triggers the first waveform recording)
+//   0.30 s   the recording (start-up) is copied to sim/out/H3/capture_run
+//   0.45 s   KEY1: new recording
 //   0.60 s   SW4..SW3 = 01, 10, 11 (frequency, peak current, shoot-through), then 00 (THD) at 0.63 s
-//   0.70 s   SW1 up: load 33 -> 22 ohm
+//   0.70 s   SW1 up: load 33 -> 22 ohm (triggers the second recording)
 //   0.85 s   SW0 down: filter off (the THD reading of 0.9-1.0 s is all filter off)
+//   1.00 s   the recording (load step, filter off) is copied to sim/out/H3/capture_step
 //   1.10 s   KEY0 pressed for 1 ms: reset
 // Prints what the board shows every 50 ms and checks it. Writes the samples the
-// THD meter takes and its readings for matlab/board_check_H3.m (bit-exact check).
-// Shorter reset, debounce and refresh times than on the board, so the 1.12 s run
-// stays about 12 minutes (1.13 s of board time).
+// THD meter takes and its readings for matlab/board_check_H3.m (bit-exact check),
+// and the recordings in the format of quartus/read_capture_H3.tcl (board_capture_H3.m).
+// Shorter reset, debounce and refresh times and a shorter recording (4096 samples)
+// than on the board, so the run stays about 12 minutes (1.13 s of board time).
 //
-//   vsim -c work.tb_de2_115_H3 -do "run -all; quit -f"
+//   vsim -c -L altera_mf_ver work.tb_de2_115_H3 -do "run -all; quit -f"
 `timescale 1ns/1ps
 module tb_de2_115_H3;
     logic CLOCK_50 = 0;
@@ -24,7 +28,19 @@ module tb_de2_115_H3;
     logic [6:0]  HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, HEX6, HEX7;
 
     de2_115_top_H3 #(.COS_FILE("rtl/cos_table_4096.hex"), .THD_TABLE_FILE("rtl/thd_table_200.hex"),
-                     .RESET_CLKS(100), .DEBOUNCE_CLKS(1000), .REFRESH(50_000)) dut (.*);
+                     .RESET_CLKS(100), .DEBOUNCE_CLKS(1000), .REFRESH(50_000), .CAP_LOG2(12)) dut (.*);
+
+    // ---- the recording memories, written as the PC reads them: one hex word per line ----
+    task automatic dump_capture(input string dir);
+        int fd;
+        fd = $fopen({dir, "/IG.txt"}, "w"); for (int i = 0; i < 4096; i++) $fwrite(fd, "%04X\n", dut.cap.g_mem[0].mem.m_default.altsyncram_inst.mem_data[i]); $fclose(fd);
+        fd = $fopen({dir, "/IL.txt"}, "w"); for (int i = 0; i < 4096; i++) $fwrite(fd, "%04X\n", dut.cap.g_mem[1].mem.m_default.altsyncram_inst.mem_data[i]); $fclose(fd);
+        fd = $fopen({dir, "/II.txt"}, "w"); for (int i = 0; i < 4096; i++) $fwrite(fd, "%04X\n", dut.cap.g_mem[2].mem.m_default.altsyncram_inst.mem_data[i]); $fclose(fd);
+        fd = $fopen({dir, "/VD.txt"}, "w"); for (int i = 0; i < 4096; i++) $fwrite(fd, "%04X\n", dut.cap.g_mem[3].mem.m_default.altsyncram_inst.mem_data[i]); $fclose(fd);
+        fd = $fopen({dir, "/VG.txt"}, "w"); for (int i = 0; i < 4096; i++) $fwrite(fd, "%04X\n", dut.cap.g_mem[4].mem.m_default.altsyncram_inst.mem_data[i]); $fclose(fd);
+        fd = $fopen({dir, "/INF.txt"}, "w"); for (int i = 0; i < 8; i++) $fwrite(fd, "%08X\n", dut.cap.info_mem.m_default.altsyncram_inst.mem_data[i]); $fclose(fd);
+        if (fd == 0) $display("  cannot write %s (make the folder first)", dir);
+    endtask
 
     longint cycles = 0;
     real t;
@@ -68,7 +84,7 @@ module tb_de2_115_H3;
     initial begin
         forever begin
             #50ms;
-            $display("%6.3f s  [%s]  LEDG %b  faults %b  gates %b", t, board(), LEDG[3:0], LEDR[3:0], LEDR[17:12]);
+            $display("%6.3f s  [%s]  LEDG %b  faults %b  gates %b  rec %b", t, board(), LEDG[3:0], LEDR[3:0], LEDR[17:12], LEDG[8]);
         end
     end
 
@@ -80,7 +96,12 @@ module tb_de2_115_H3;
         $display("  time     HEX7..0       LEDG3..0 = 22ohm, switching, ready, locked");
         KEY[0] = 0; #1us; KEY[0] = 1;
         #10ms;   SW[0] = 1;
-        #590ms;  s = board();
+        #290ms;                                                     // 0.30 s
+        check("0.30 s: LEDG8 on: the start-up recording is ready", LEDG[8] == 1);
+        dump_capture("sim/out/H3/capture_run");
+        #150ms;  KEY[1] = 0; #1ms; KEY[1] = 1; #1ms;                // 0.45 s: KEY1
+        check("0.45 s: KEY1: LEDG8 off, recording again", LEDG[8] == 0);
+        #148ms;  s = board();                                       // 0.60 s
         check($sformatf("0.60 s: DC link on the left, 295..305 V        [%s]", s.substr(0, 3)),
               num(s.substr(0, 3)) >= 295 && num(s.substr(0, 3)) <= 305);
         check($sformatf("0.60 s: THD on the right, 3..6 %%             [%s]", s.substr(5, 8)),
@@ -101,7 +122,10 @@ module tb_de2_115_H3;
         #50ms;   SW[0] = 0;                                         // 0.85 s
         #20ms;
         check("0.87 s: filter off: switching LED and gate LEDs off", LEDG[2] == 0 && LEDR[17:12] == 0);
-        #225ms;  s = board();                                       // 1.095 s
+        #130ms;                                                     // 1.00 s
+        check("1.00 s: LEDG8 on: the load-step recording is ready", LEDG[8] == 1);
+        dump_capture("sim/out/H3/capture_step");
+        #95ms;   s = board();                                       // 1.095 s
         check($sformatf("1.095 s: THD with the filter off above 15 %%   [%s]", s.substr(5, 8)),
               s[6] != "_" && num(s.substr(5, 8)) >= 150);
         check("1.095 s: no faults, no shoot-through", LEDR[3:0] == 0 && dut.shoot_count == 0);

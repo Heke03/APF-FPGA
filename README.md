@@ -297,7 +297,8 @@ them in closed loop. Progress and results are in [docs/H3_progress.md](docs/H3_p
   it on the board: KEY0 reset, SW0 run, SW1 load step, SW2 ADC noise, SW4..3 choose the right display; DC link
   on the left display; THD of the grid current (`rtl/thd_meter_H3.sv`, bit-exact with `matlab/thd_meter_H3.m`),
   PLL frequency, peak current or shoot-through count on the right; status, gate and fault LEDs. Pins come from
-  Terasic's DE2-115 pin list; unused pins are inputs. 9 % of the logic, +1.77 ns slack at 85 C.
+  Terasic's DE2-115 pin list; unused pins are inputs. A waveform recorder (`rtl/capture_H3.sv`) keeps 0.82 s
+  before and after each switch flip; MATLAB reads it over the USB cable (`quartus/read_capture_H3.tcl`). 10 % of the logic, +2.19 ns slack at 85 C.
 - **Step 4, still to do:** test on the board.
 
 ```matlab
@@ -321,6 +322,7 @@ vsim -c -do sim/run_board_H3.do   # THD meter bit-exact, displays, the board top
 ```
 ```matlab
 board_check_H3            % the board's THD readings against the MATLAB meter
+capture_check_H3          % the simulated waveform recordings against the meter's samples
 ```
 ```powershell
 .\quartus\build_de2_115_H3.ps1   # builds quartus\de2_115_H3\output_files\de2_115_top_H3.sof (~1 min)

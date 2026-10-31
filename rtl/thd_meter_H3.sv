@@ -28,7 +28,8 @@ module thd_meter_H3 #(
     input  logic signed [31:0] sample,       // 2^-24 A
     output logic [13:0] thd,                 // 0.01 %, 0..9999
     output logic        thd_valid,           // the last reading had current to measure
-    output logic        reading_done         // one clock when a reading is published
+    output logic        reading_done,        // one clock when a reading is published
+    output logic [9:0]  window_pos           // samples taken in the current window (0..999)
 );
     localparam integer N = 1000, M = 200, H = 40;
     localparam logic [52:0] MIN_F1 = 53'd1 << 28;
@@ -74,6 +75,7 @@ module thd_meter_H3 #(
     wire signed [16:0] tab_c = tab_q[33:17];
     wire signed [16:0] tab_s = tab_q[16:0];
     wire [52:0] p_h = sq_re + sq_im;
+    assign window_pos = k;
 
     always_comb begin
         acc_d = '0;

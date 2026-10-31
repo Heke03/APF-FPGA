@@ -13,6 +13,7 @@ module tb_thd_meter_H3;
     logic signed [31:0] sample = '0;
     logic [13:0] thd;
     logic thd_valid, reading_done;
+    logic [9:0] window_pos;
 
     thd_meter_H3 #(.TABLE_FILE("rtl/thd_table_200.hex")) dut (.*);
 

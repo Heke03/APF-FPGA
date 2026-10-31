@@ -5,6 +5,7 @@
 // Port names as in Terasic's DE2-115 pin list; nothing else on the board is driven.
 //
 //   KEY0        reset (hold); also a reset at power-up
+//   KEY1        new waveform recording (see capture_H3; flipping SW0..SW2 triggers it)
 //   SW0         run: filter on / off          SW1  load 33 / 22 ohm
 //   SW2         ADC noise on / off            SW4..SW3  right display:
 //                 00 THD of grid current a, %   ("4_40" = 4.40 %, "----" = no reading yet)
@@ -13,6 +14,7 @@
 //                 11 shoot-through count        (always 0)
 //   HEX7..HEX4  DC-link voltage, V              HEX3..HEX0  the reading above
 //   LEDG0..3    PLL locked, ready, switching, 22 ohm load
+//   LEDG8       a waveform recording is ready to read (MATLAB: board_capture_H3)
 //   LEDR17..12  gates A high, A low, B high, B low, C high, C low (glow while switching)
 //   LEDR3..0    faults: PLL lost, over-voltage, over-current, measurement
 module de2_115_top_H3 #(
@@ -20,7 +22,8 @@ module de2_115_top_H3 #(
     parameter         THD_TABLE_FILE = "thd_table_200.hex",
     parameter integer RESET_CLKS     = 1_000_000,    // reset lasts 20 ms after KEY0 / power-up
     parameter integer DEBOUNCE_CLKS  = 500_000,      // a switch must be steady 10 ms
-    parameter integer REFRESH        = 10_000_000    // displays updated every 0.2 s
+    parameter integer REFRESH        = 10_000_000,   // displays updated every 0.2 s
+    parameter integer CAP_LOG2       = 14            // recording: 2^14 samples = 1.64 s
 ) (
     input  logic        CLOCK_50,
     input  logic [3:0]  KEY,                         // pressed = 0
@@ -42,16 +45,16 @@ module de2_115_top_H3 #(
         rst_n <= (rst_cnt == RESET_CLKS);
     end
 
-    // ---- switches: synchronize, then accept a change once steady ----
-    localparam integer NSW = 5;
-    logic [NSW-1:0] sw_s1, sw_s2, sw;
+    // ---- switches and KEY1: synchronize, then accept a change once steady ----
+    localparam integer NSW = 6;                      // SW0..SW4, and bit 5 = KEY1 pressed
+    logic [NSW-1:0] sw_s1, sw_s2, sw, sw_prev;
     logic [$clog2(DEBOUNCE_CLKS+1)-1:0] db_cnt [NSW];
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            sw_s1 <= '0; sw_s2 <= '0; sw <= '0;
+            sw_s1 <= '0; sw_s2 <= '0; sw <= '0; sw_prev <= '0;
             for (int i = 0; i < NSW; i++) db_cnt[i] <= '0;
         end else begin
-            sw_s1 <= SW[NSW-1:0]; sw_s2 <= sw_s1;
+            sw_s1 <= {~KEY[1], SW[4:0]}; sw_s2 <= sw_s1; sw_prev <= sw;
             for (int i = 0; i < NSW; i++)
                 if (sw_s2[i] == sw[i]) db_cnt[i] <= '0;
                 else if (db_cnt[i] == DEBOUNCE_CLKS) begin sw[i] <= sw_s2[i]; db_cnt[i] <= '0; end
@@ -72,12 +75,40 @@ module de2_115_top_H3 #(
     logic [13:0] thd;
     logic        thd_valid, thd_done;
     logic [32:0] i_grid_peak;
+    logic [9:0]  thd_window_pos;
+    logic        sample_now;
 
     apf_vps_system_H3 #(.COS_FILE(COS_FILE), .THD_TABLE_FILE(THD_TABLE_FILE)) sys (
         .clk, .rst_n, .run_request(sw[0]), .load_step(sw[1]), .noise_en(sw[2]),
         .gate_hi, .gate_lo, .switching, .pll_locked, .compensating_ready, .fault_flags,
         .freq_word, .vdc_avg, .idc_cmd, .vg_a, .i_load_a, .i_inv_a, .vdc, .shoot_count,
-        .thd, .thd_valid, .thd_done, .i_grid_peak
+        .thd, .thd_valid, .thd_done, .thd_window_pos, .i_grid_peak, .sample_now
+    );
+
+    // ---- waveform recording: the 5 channels at the meter's sample instants ----
+    function automatic logic [15:0] sat16(input logic signed [42:0] x, input int s);   // round, >>> s, 16 bit
+        logic signed [42:0] y;
+        y = (x + (43'sd1 <<< (s - 1))) >>> s;
+        return (y > 32767) ? 16'h7FFF : (y < -32768) ? 16'h8000 : 16'(y);
+    endfunction
+    logic        cap_we, cap_ready;
+    logic [15:0] cap_ig, cap_il, cap_ii, cap_vd, cap_vg;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            cap_we <= 1'b0; cap_ig <= '0; cap_il <= '0; cap_ii <= '0; cap_vd <= '0; cap_vg <= '0;
+        end else begin                               // the values the meter takes, written one clock later
+            cap_we <= sample_now;
+            cap_ig <= sat16(43'(i_load_a) - 43'(i_inv_a), 14);       // 2^-10 A, as the meter rounds it
+            cap_il <= sat16(43'(i_load_a), 14);
+            cap_ii <= sat16(43'(i_inv_a), 14);
+            cap_vd <= 16'(((vdc + 42'sd131072) >>> 18) > 65535 ? 65535 : ((vdc + 42'sd131072) >>> 18));   // 2^-6 V
+            cap_vg <= sat16(43'(vg_a), 5);                           // 2^-7 V
+        end
+    end
+    capture_H3 #(.DEPTH_LOG2(CAP_LOG2)) cap (
+        .clk, .rst_n, .sample_en(cap_we), .ig(cap_ig), .il(cap_il), .ii(cap_ii), .vd(cap_vd), .vg(cap_vg),
+        .trig(sw[2:0] != sw_prev[2:0]), .sw_before(sw_prev[2:0]), .sw_after(sw[2:0]),
+        .arm(sw[5] && !sw_prev[5]), .meter_pos(thd_window_pos), .ready(cap_ready)
     );
 
     // ---- the right display's reading ----
@@ -113,7 +144,7 @@ module de2_115_top_H3 #(
            {hex[7], hex[6], hex[5], hex[4], hex[3], hex[2], hex[1], hex[0]};
 
     // ---- LEDs ----
-    assign LEDG = {5'b0, sw[1], switching, compensating_ready, pll_locked};
+    assign LEDG = {cap_ready, 4'b0, sw[1], switching, compensating_ready, pll_locked};
     assign LEDR = {gate_hi[0], gate_lo[0], gate_hi[1], gate_lo[1], gate_hi[2], gate_lo[2],
                    8'b0, fault_flags};
 endmodule

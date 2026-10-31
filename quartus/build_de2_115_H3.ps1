@@ -21,7 +21,7 @@ New-Item -ItemType Directory -Force $dir | Out-Null
 function Abs($f) { (Resolve-Path (Join-Path $root $f)).Path -replace '\\', '/' }
 
 $files = 'srf_pll', 'apf_reference', 'current_controller', 'three_phase_pwm', 'apf_core',
-         'virtual_power_stage_H3', 'vps_adc_H3', 'thd_meter_H3', 'apf_vps_system_H3', 'display_H3', $top
+         'virtual_power_stage_H3', 'vps_adc_H3', 'thd_meter_H3', 'apf_vps_system_H3', 'display_H3', 'capture_H3', $top
 $lines = @(
     "project_new $top -overwrite",
     'set_global_assignment -name FAMILY "Cyclone IV E"',
@@ -64,11 +64,13 @@ try {
         if ($sta[$i] -match "Type\s*:\s*(.*Model (Setup|Hold) 'CLOCK_50')") { "{0,-45} {1}" -f $Matches[1], $sta[$i + 1].Trim() }
     }
     # pin check: every user output must be an LED or a display segment. The chip's own
-    # configuration and JTAG pins (~ALTERA_...~, TDO) are listed apart: every design has them.
+    # configuration and JTAG pins (~ALTERA_...~, TDO, or altera_reserved_tdo when the design
+    # has JTAG-readable memories) are listed apart: every design has them.
     $pins = Get-Content "output_files\$top.pin" | Where-Object { $_ -match '^\S.*:\s*\w+\s*:' }
     $outs = $pins | Where-Object { ($_ -split ':')[2].Trim() -eq 'output' } | ForEach-Object { ($_ -split ':')[0].Trim() }
-    $cfg = $outs | Where-Object { $_ -match '^(~ALTERA_\w+~|TDO)' }
-    $user = $outs | Where-Object { $_ -notmatch '^(~ALTERA_\w+~|TDO)' }
+    $cfgPattern = '^(~ALTERA_\w+~|TDO|altera_reserved_\w+)'
+    $cfg = $outs | Where-Object { $_ -match $cfgPattern }
+    $user = $outs | Where-Object { $_ -notmatch $cfgPattern }
     $bad = $user | Where-Object { $_ -notmatch '^(LEDG|LEDR|HEX[0-7])\[\d+\]$' }
     "Pins: {0} user outputs, other user outputs than LEDs and displays: {1}" -f $user.Count, $(if ($bad) { $bad -join ', ' } else { 'none' })
     "      configuration/JTAG outputs: {0}" -f ($cfg -join ', ')

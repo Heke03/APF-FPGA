@@ -32,7 +32,9 @@ module apf_vps_system_H3 #(
     output logic [13:0] thd,                 // 0.01 %
     output logic        thd_valid,
     output logic        thd_done,            // one clock per reading
-    output logic [32:0] i_grid_peak          // 2^-24 A
+    output logic [9:0]  thd_window_pos,      // samples taken in the meter's current window
+    output logic [32:0] i_grid_peak,         // 2^-24 A
+    output logic        sample_now           // one clock per frame: the ADC and the meter sample now
 );
     logic adc_start, adc_valid, step_done;
     logic [11:0] adc_code [0:6];
@@ -65,8 +67,9 @@ module apf_vps_system_H3 #(
 
     thd_meter_H3 #(.TABLE_FILE(THD_TABLE_FILE)) meter (
         .clk, .rst_n, .sample_en(adc_start), .sample(32'(i_grid)),
-        .thd, .thd_valid, .reading_done(thd_done)
+        .thd, .thd_valid, .reading_done(thd_done), .window_pos(thd_window_pos)
     );
+    assign sample_now = adc_start && rst_n;      // adc_start is high all through reset
 
     logic [32:0] peak_run;
     always_ff @(posedge clk or negedge rst_n) begin
