@@ -1,9 +1,11 @@
-# APF FPGA: three-phase VSI shunt active power filter (DE1-SoC)
+# APF FPGA: three-phase VSI shunt active power filter (DE2-115)
 
-Working project for the FPGA part of the graduation project. Target chip:
-Cyclone V SoC **5CSEMA5F31C6** (Terasic DE1-SoC), 50 MHz clock.
-**Update 30 Oct 2026:** the lab board is actually a **Terasic DE2-115 (Cyclone IV E EP4CE115F29C7)**.
-The RTL is board-independent, but the Quartus checks below still target the DE1-SoC.
+Working project for the FPGA part of the graduation project. The board is a **Terasic DE2-115
+(Cyclone IV E EP4CE115F29C7)**, 50 MHz clock. The newest work is at the end: [H3](#h3-virtual-power-stage-the-apf-running-on-the-de2-115-alone-31-oct-2026)
+(the APF computed on the board alone) and [HEX4](#hex4-board-test-delay-steps-real-hardware-path-6-nov-2026).
+
+The early sections below targeted a Cyclone V SoC 5CSEMA5F31C6 (Terasic DE1-SoC), because that was thought
+to be the lab board until 30 Oct 2026. Their RTL is board-independent, and their Quartus checks still use that chip.
 See the H1 section for the sensors and ADC.
 The original ChatGPT-era packages are kept unchanged as a backup in `Desktop\H1`.
 
@@ -253,7 +255,7 @@ Each option was simulated in closed loop with the real `apf_core` RTL (16 scenar
   time. Keep it under about 15 us (THD up to 4.7 %); 30-50 us gives 5.1-5.3 % at 33 ohm, 100 us gives 7.3 %.
 - The cRIO's delta-sigma modules (NI 9244/9246, about 0.8 ms delay) trip the inverter. Use the cRIO as
   an independent power-quality meter and operator panel, not in the control loop.
-- The DE2-115 needs Cyclone IV E device support in Quartus (not installed yet) and an AD7606 driver.
+- The DE2-115 needs Cyclone IV E device support in Quartus (installed in H3) and an AD7606 driver (written in HEX4).
 
 ```tcl
 vsim -c -do sim/run_sensor_study_H1.do          # all scenarios, about 5 min each
@@ -299,7 +301,7 @@ them in closed loop. Progress and results are in [docs/H3_progress.md](docs/H3_p
   PLL frequency, peak current or shoot-through count on the right; status, gate and fault LEDs. Pins come from
   Terasic's DE2-115 pin list; unused pins are inputs. A waveform recorder (`rtl/capture_H3.sv`) keeps 0.82 s
   before and after each switch flip; MATLAB reads it over the USB cable (`quartus/read_capture_H3.tcl`). 10 % of the logic, +2.19 ns slack at 85 C.
-- **Step 4, still to do:** test on the board.
+- **Step 4, not run yet:** test on the board. The guided test is ready, see HEX4 below.
 
 ```matlab
 cd matlab
@@ -327,6 +329,20 @@ capture_check_H3          % the simulated waveform recordings against the meter'
 ```powershell
 .\quartus\build_de2_115_H3.ps1   # builds quartus\de2_115_H3\output_files\de2_115_top_H3.sof (~1 min)
 ```
+
+## HEX4: board test, delay steps, real-hardware path (6 Nov 2026)
+
+The run tag changes from H to HEX with this work. Results, what is unverified, and sources: [docs/HEX4_progress.md](docs/HEX4_progress.md).
+**Nothing here has run on a real board or touched real hardware.**
+
+- **Guided board test:** `Desktop\Randos\matlab\5_Board_Test_HEX4\run_board_HEX4.m` loads the design, says which switch to flip,
+  reads the recordings and gives pass or fail. `quartus/read_capture_HEX4.tcl` is safe against the status memory changing during a read.
+  Its full simulation is not finished yet (stopped at 2.0 s of 4.77 s for low memory).
+- **The 50 us THD steps follow the PWM,** not a fixed time. Bigger result for the team: in the model, THD halves each time the
+  PWM frequency doubles (9.5 / 4.85 / 2.5 % at 5 / 10 / 20 kHz).
+- **Real-hardware design, ready if the team approves the ADC and sensors:** `rtl/de2_115_hw_top_HEX4.sv` with an AD7606 driver and a gate
+  guard, on the 40-pin header. In a 1 s closed loop it matches H3 (4.37 / 3.51 % against 4.40 / 3.51 %), with 0 wrong codes in 9,999 frames.
+  Every staged fault stops the gates. 8 % of the logic, +3.91 ns slack at 85 C.
 
 ## Rerun
 

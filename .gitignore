@@ -1,6 +1,8 @@
 # Generated on each PC - do not share (they contain that PC's paths or are rebuilt anyway)
 work/
 work_h3/
+work_hex4*/
+*.tmp
 transcript
 *.wlf
 wlft*
@@ -32,5 +34,6 @@ matlab/slprj/
 *.autosave
 matlab/results/
 
-# DE2-115 build (rebuilt by quartus/build_de2_115_H3.ps1)
+# DE2-115 builds (rebuilt by quartus/build_de2_115_H3.ps1 and build_de2_115_hw_HEX4.ps1)
 quartus/de2_115_H3/
+quartus/de2_115_hw_HEX4/

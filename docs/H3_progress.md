@@ -9,8 +9,8 @@ Decided with the user on 31 Oct 2026; the presentation format is still to be dec
 |---|---|---|
 | 1 | MATLAB/Simulink model of the VPS in fixed point, checked against the Simscape model | **done** |
 | 2 | FPGA code for the VPS (+ ADC code converter), bit-exact against the MATLAB model; closed loop with `apf_core` in Questa | **done** |
-| 3 | DE2-115 top level: Cyclone IV support in Quartus, timing on the real chip, pins from Terasic's list, switches/LEDs/7-seg, compile | in progress: Cyclone IV installed, timing fixed; top level next |
-| 4 | Test on the board together with the user (Signal Tap instead of an oscilloscope) | waiting |
+| 3 | DE2-115 top level: Cyclone IV support in Quartus, timing on the real chip, pins from Terasic's list, switches/LEDs/7-seg, compile, waveform recorder | **done** |
+| 4 | Test on the board together with the user | not run yet. The guided test is ready: see [HEX4_progress.md](HEX4_progress.md) |
 
 ## Step 1 result (31 Oct 2026)
 
@@ -218,12 +218,12 @@ MATLAB command reads the board and plots.
 | `quartus/read_capture_H3.tcl` | `quartus_stp` script: finds the USB-Blaster and the EP4CE115, reads the six memories, writes them in address order |
 | `matlab/load_capture_H3.m` | turns the files into time-aligned signals in A and V, and the meter's window starts |
 | `matlab/capture_check_H3.m` | checks the recordings of the board simulation against the samples the meter took |
-| `Desktop\matlab\4_Board_Test_H3\run_board_H3.m` | the user's Live Script: reads the board (or shows the simulated recordings), plots against the Questa run, and lists the THD the display showed |
+| `Desktop\Randos\matlab\4_Board_Test_H3\run_board_H3.m` | the user's Live Script: reads the board (or shows the simulated recordings), plots against the Questa run, and lists the THD the display showed |
 
 With the recorder: 10 % of the logic, 37 % of the memory bits (1.48 Mbit), setup slack +2.19 ns at 85 °C.
 The JTAG data pin is then called `altera_reserved_tdo` in the pin report (still the chip's own JTAG pin).
 
-Next: step 4 on the board.
+Next: step 4 on the board. HEX4 made it one guided run, `5_Board_Test_HEX4\run_board_HEX4.m`.
 
 ## Notes for whoever continues
 
